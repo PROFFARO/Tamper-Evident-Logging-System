@@ -50,6 +50,7 @@ let currentPage = 1;
 let currentFilters = {};
 let metaData = null;
 let agentRefreshInterval = null;
+let lastVerificationReport = null;
 
 // ============================================================
 //  Navigation
@@ -381,6 +382,7 @@ async function runVerification() {
     
     try {
         const report = await API.verify();
+        lastVerificationReport = report;
         
         if (report.total_entries === 0) {
             container.innerHTML = '<div class="empty-state"><p>No entries to verify. Add some log entries first.</p></div>';
@@ -392,7 +394,12 @@ async function runVerification() {
         let html = `
             <div class="verification-summary ${intact ? 'intact' : 'tampered'}">
                 <div class="verification-summary__header">
-                    <div class="verification-summary__icon">${intact ? '✅' : '🚨'}</div>
+                    <div class="verification-summary__icon">
+                        ${intact ? 
+                            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>' : 
+                            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+                        }
+                    </div>
                     <div>
                         <div class="verification-summary__title">${intact ? 'Chain Integrity Verified' : 'TAMPERING DETECTED!'}</div>
                         <div class="verification-summary__subtitle">${intact ? 'All entries passed verification checks' : `${report.tampered_entries} compromised entries found. First tamper at entry #${report.first_tamper_point}`}</div>
@@ -414,15 +421,14 @@ async function runVerification() {
         report.entries.forEach(e => {
             const valid = e.is_valid;
             html += `
-                <div class="verify-entry ${valid ? 'valid' : 'invalid'}">
+                <div class="verify-entry ${valid ? 'valid' : 'invalid'}" onclick="openVerificationSidebar(${e.entry_id})" style="cursor:pointer" title="Click for detailed mathematical trace">
                     <span class="verify-entry__id">#${e.entry_id}</span>
                     <span style="font-size:.75rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Entry ${e.entry_id}</span>
-                    <span class="verify-check ${e.hash_valid ? 'pass' : 'fail'}">${e.hash_valid ? '✓ Valid' : '✗ Fail'}</span>
-                    <span class="verify-check ${e.hmac_valid ? 'pass' : 'fail'}">${e.hmac_valid ? '✓ Valid' : '✗ Fail'}</span>
-                    <span class="verify-check ${e.sequence_valid ? 'pass' : 'fail'}">${e.sequence_valid ? '✓ Valid' : '✗ Fail'}</span>
-                    <span class="verify-check ${e.timestamp_valid ? 'pass' : 'fail'}">${e.timestamp_valid ? '✓ Valid' : '✗ Fail'}</span>
-                    <span></span>
-                    ${!valid ? `<div class="verify-entry__error">⚠ ${escapeHtml(e.error_message)}</div>` : ''}
+                    <span class="verify-check ${e.hash_valid ? 'pass' : 'fail'}">${e.hash_valid ? 'PASS' : 'FAIL'}</span>
+                    <span class="verify-check ${e.hmac_valid ? 'pass' : 'fail'}">${e.hmac_valid ? 'PASS' : 'FAIL'}</span>
+                    <span class="verify-check ${e.sequence_valid ? 'pass' : 'fail'}">${e.sequence_valid ? 'PASS' : 'FAIL'}</span>
+                    <span class="verify-check ${e.timestamp_valid ? 'pass' : 'fail'}">${e.timestamp_valid ? 'PASS' : 'FAIL'}</span>
+                    <span><button class="btn btn-ghost btn-xs">Details</button></span>
                 </div>`;
         });
         html += '</div>';
@@ -433,6 +439,52 @@ async function runVerification() {
         container.innerHTML = `<div class="empty-state"><p>Verification failed: ${escapeHtml(err.message)}</p></div>`;
         showToast('Verification error: ' + err.message, 'error');
     }
+}
+
+function openVerificationSidebar(entryId) {
+    if (!lastVerificationReport) return;
+    const entryData = lastVerificationReport.entries.find(e => e.entry_id === entryId);
+    if (!entryData) return;
+    
+    document.getElementById('vsId').textContent = entryData.entry_id;
+    document.getElementById('vsStatus').innerHTML = entryData.is_valid 
+        ? '<span style="color:var(--color-success)">VERIFIED</span>'
+        : '<span style="color:var(--color-danger)">TAMPER DETECTED</span>';
+        
+    document.getElementById('vsExpectedHash').textContent = entryData.expected_hash || 'Genesis block / Not generated';
+    document.getElementById('vsStoredHash').textContent = entryData.stored_hash || 'N/A';
+    
+    document.getElementById('vsHashValid').className = `verify-check ${entryData.hash_valid ? 'pass' : 'fail'}`;
+    document.getElementById('vsHashValid').textContent = entryData.hash_valid ? 'PASS' : 'FAIL';
+    
+    document.getElementById('vsHmacValid').className = `verify-check ${entryData.hmac_valid ? 'pass' : 'fail'}`;
+    document.getElementById('vsHmacValid').textContent = entryData.hmac_valid ? 'PASS' : 'FAIL';
+    
+    document.getElementById('vsSeqValid').className = `verify-check ${entryData.sequence_valid ? 'pass' : 'fail'}`;
+    document.getElementById('vsSeqValid').textContent = entryData.sequence_valid ? 'PASS' : 'FAIL';
+
+    document.getElementById('vsTimeValid').className = `verify-check ${entryData.timestamp_valid ? 'pass' : 'fail'}`;
+    document.getElementById('vsTimeValid').textContent = entryData.timestamp_valid ? 'PASS' : 'FAIL';
+    
+    const errorContainer = document.getElementById('vsErrorContainer');
+    if (entryData.is_valid) {
+        errorContainer.style.display = 'none';
+        errorContainer.innerHTML = '';
+    } else {
+        errorContainer.style.display = 'block';
+        let issuesHtml = '<h4 style="margin-bottom:8px;color:#fca5a5;border-bottom:1px solid #450a0a;padding-bottom:4px;">Cryptographic Diagnostic TRACE</h4><ul style="list-style-position:inside;padding-left:0;">';
+        entryData.issues.forEach(issue => {
+            issuesHtml += `<li style="margin-bottom:6px;background:#450a0a;padding:8px;border-radius:4px;border-left:3px solid #ef4444;"><strong style="color: white; display:block;font-size:0.85rem">${issue.type}</strong> <span style="font-family:var(--font-mono);font-size:0.8rem">${escapeHtml(issue.message)}</span></li>`;
+        });
+        issuesHtml += '</ul>';
+        errorContainer.innerHTML = issuesHtml;
+    }
+    
+    document.getElementById('verificationSidebar').classList.add('open');
+}
+
+function closeVerificationSidebar() {
+    document.getElementById('verificationSidebar').classList.remove('open');
 }
 
 // ============================================================

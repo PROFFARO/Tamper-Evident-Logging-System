@@ -414,22 +414,43 @@
                     <p>Click "Run Full Verification" to check the integrity of all log entries</p>
                     <div class="verification-info-grid">
                         <div class="verification-info-card">
-                            <span class="info-icon">🔗</span>
+                            <span class="info-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                                </svg>
+                            </span>
                             <span class="info-label">Hash Chain</span>
                             <span class="info-desc">Verifies SHA-256 chain integrity</span>
                         </div>
                         <div class="verification-info-card">
-                            <span class="info-icon">🔐</span>
+                            <span class="info-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                                </svg>
+                            </span>
                             <span class="info-label">HMAC Signatures</span>
                             <span class="info-desc">Validates authentication codes</span>
                         </div>
                         <div class="verification-info-card">
-                            <span class="info-icon">🔢</span>
+                            <span class="info-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                    <line x1="4" y1="6" x2="20" y2="6" />
+                                    <line x1="4" y1="12" x2="20" y2="12" />
+                                    <line x1="4" y1="18" x2="16" y2="18" />
+                                </svg>
+                            </span>
                             <span class="info-label">Sequence Check</span>
                             <span class="info-desc">Detects deleted entries</span>
                         </div>
                         <div class="verification-info-card">
-                            <span class="info-icon">⏱️</span>
+                            <span class="info-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <polyline points="12 6 12 12 16 14" />
+                                </svg>
+                            </span>
                             <span class="info-label">Temporal Order</span>
                             <span class="info-desc">Detects reordered entries</span>
                         </div>
@@ -686,6 +707,42 @@
 
     <!-- ========== TOAST NOTIFICATIONS ========== -->
     <div class="toast-container" id="toastContainer"></div>
+
+    <!-- ========== VERIFICATION SIDEBAR ========== -->
+    <div class="verification-sidebar" id="verificationSidebar">
+        <div class="vs-header">
+            <h3>Diagnostic Trace</h3>
+            <button class="vs-close" onclick="closeVerificationSidebar()">&times;</button>
+        </div>
+        <div class="vs-body">
+            <div class="vs-top-stats">
+                <div>
+                    <span class="vs-label">Log ID</span>
+                    <span class="vs-value mono">#<span id="vsId"></span></span>
+                </div>
+                <div>
+                    <span class="vs-label">Integrity</span>
+                    <span class="vs-value" id="vsStatus"></span>
+                </div>
+            </div>
+            
+            <div class="vs-section">
+                <h4 class="vs-section-title">Cryptographic Hash Validation</h4>
+                <div class="vs-row"><span class="vs-label">Expected (Recomputed) Hash:</span><div class="vs-value mono break" id="vsExpectedHash"></div></div>
+                <div class="vs-row"><span class="vs-label">Stored Database Hash:</span><div class="vs-value mono break" id="vsStoredHash"></div></div>
+            </div>
+            
+            <div class="vs-section">
+                <h4 class="vs-section-title">Security Checks</h4>
+                <div class="vs-flex-row"><span>Hash Authenticity</span><span id="vsHashValid"></span></div>
+                <div class="vs-flex-row"><span>HMAC Signature Match</span><span id="vsHmacValid"></span></div>
+                <div class="vs-flex-row"><span>Sequence Continuity</span><span id="vsSeqValid"></span></div>
+                <div class="vs-flex-row"><span>Temporal Validation</span><span id="vsTimeValid"></span></div>
+            </div>
+            
+            <div id="vsErrorContainer" class="vs-errors" style="display:none;"></div>
+        </div>
+    </div>
 
     <!-- ========== ENTRY DETAIL MODAL ========== -->
     <div class="modal-overlay" id="entryModal">
