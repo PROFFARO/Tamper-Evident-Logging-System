@@ -92,19 +92,11 @@ def agent_log_callback(event_type, severity, source, description, metadata):
 host_agent = HostAgent(log_callback=agent_log_callback, interval=15)
 
 
-# ============================================================
-#  Page Routes
-# ============================================================
-
 @app.route("/")
 def index():
     """Serve the web dashboard."""
     return render_template("index.html")
 
-
-# ============================================================
-#  Log Entry API
-# ============================================================
 
 @app.route("/api/logs", methods=["POST"])
 def add_log():
