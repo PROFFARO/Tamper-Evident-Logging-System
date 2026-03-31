@@ -35,7 +35,9 @@ const API = {
     tamperReorder: (a, b) => API.request('/api/tamper/reorder', { method: 'POST', body: JSON.stringify({ id_a: a, id_b: b }) }),
     createAnchor: () => API.request('/api/anchor', { method: 'POST' }),
     getAnchors: () => API.request('/api/anchors'),
-    seed: () => API.request('/api/seed', { method: 'POST' }),
+    agentStart: (interval) => API.request('/api/agent/start', { method: 'POST', body: JSON.stringify({ interval }) }),
+    agentStop: () => API.request('/api/agent/stop', { method: 'POST' }),
+    agentStatus: () => API.request('/api/agent/status'),
     reset: () => API.request('/api/reset', { method: 'POST' }),
     exportReport: () => API.request('/api/export'),
 };
@@ -47,6 +49,7 @@ let currentSection = 'dashboard';
 let currentPage = 1;
 let currentFilters = {};
 let metaData = null;
+let agentRefreshInterval = null;
 
 // ============================================================
 //  Navigation
@@ -186,6 +189,54 @@ async function loadDashboard() {
         }
     } catch (err) {
         showToast('Failed to load dashboard: ' + err.message, 'error');
+    }
+}
+
+// ============================================================
+//  Agent Controls
+// ============================================================
+async function updateAgentUI() {
+    try {
+        const status = await API.agentStatus();
+        const badge = document.getElementById('agentStatusBadge');
+        const btnLabel = document.getElementById('agentBtnLabel');
+        const btn = document.getElementById('btnToggleAgent');
+        
+        if (status.running) {
+            badge.textContent = `Agent Running (${status.cycles_completed} cycles)`;
+            badge.className = 'agent-status-badge agent-online';
+            btnLabel.textContent = 'Stop Agent';
+            btn.classList.remove('btn-primary');
+            btn.classList.add('btn-danger');
+        } else {
+            badge.textContent = 'Agent Offline';
+            badge.className = 'agent-status-badge agent-offline';
+            btnLabel.textContent = 'Start Agent';
+            btn.classList.remove('btn-danger');
+            btn.classList.add('btn-primary');
+        }
+    } catch {}
+}
+
+async function toggleAgent() {
+    try {
+        const status = await API.agentStatus();
+        if (status.running) {
+            await API.agentStop();
+            showToast('Host agent stopped', 'info');
+            if (agentRefreshInterval) { clearInterval(agentRefreshInterval); agentRefreshInterval = null; }
+        } else {
+            await API.agentStart(15);
+            showToast('Host agent started — collecting real-time system logs', 'success');
+            // Auto-refresh dashboard every 20 seconds while agent is running
+            agentRefreshInterval = setInterval(() => {
+                if (currentSection === 'dashboard') loadDashboard();
+            }, 20000);
+        }
+        updateAgentUI();
+        setTimeout(loadDashboard, 2000);
+    } catch (err) {
+        showToast('Agent error: ' + err.message, 'error');
     }
 }
 
@@ -526,22 +577,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Dashboard actions
     document.getElementById('btnRefreshDashboard')?.addEventListener('click', loadDashboard);
-    document.getElementById('btnSeedData')?.addEventListener('click', async () => {
-        try {
-            showToast('Seeding sample data...', 'info');
-            await API.seed();
-            showToast('Sample data seeded successfully!', 'success');
-            loadDashboard();
-        } catch (err) { showToast('Seed failed: ' + err.message, 'error'); }
-    });
-    document.getElementById('btnSeedDataEmpty')?.addEventListener('click', async () => {
-        try {
-            showToast('Seeding sample data...', 'info');
-            await API.seed();
-            showToast('Sample data seeded successfully!', 'success');
-            loadDashboard();
-        } catch (err) { showToast('Seed failed: ' + err.message, 'error'); }
-    });
+    // Agent toggle
+    document.getElementById('btnToggleAgent')?.addEventListener('click', toggleAgent);
     
     // Log filters
     document.getElementById('btnApplyFilters')?.addEventListener('click', () => {
@@ -597,11 +634,12 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) { showToast(err.message, 'error'); }
     });
     document.getElementById('btnVerifyAfterTamper')?.addEventListener('click', () => { navigateTo('verify'); setTimeout(runVerification, 200); });
-    document.getElementById('btnResetAndReseed')?.addEventListener('click', async () => {
+    document.getElementById('btnResetDB')?.addEventListener('click', async () => {
         try {
-            showToast('Resetting and reseeding...', 'info');
-            await API.seed();
-            showToast('Database reset and reseeded!', 'success');
+            showToast('Resetting database...', 'info');
+            await API.reset();
+            showToast('Database reset successfully!', 'success');
+            loadDashboard();
         } catch (err) { showToast(err.message, 'error'); }
     });
     
@@ -644,4 +682,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load initial data
     loadFilterOptions();
     loadDashboard();
+    updateAgentUI();
+    
+    // If agent is already running (auto-start), enable auto-refresh
+    API.agentStatus().then(status => {
+        if (status.running) {
+            agentRefreshInterval = setInterval(() => {
+                if (currentSection === 'dashboard') loadDashboard();
+            }, 20000);
+        }
+    }).catch(() => {});
 });

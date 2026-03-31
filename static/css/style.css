@@ -665,6 +665,32 @@ select.form-input { appearance: auto; cursor: pointer; }
 .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border-color-2); border-top-color: var(--accent-blue); border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to{transform:rotate(360deg)} }
 
+/* Agent status badge */
+.agent-status-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 14px; border-radius: 20px;
+    font-size: .75rem; font-weight: 600; font-family: var(--font-mono);
+    letter-spacing: .02em;
+}
+.agent-status-badge::before {
+    content: ''; width: 8px; height: 8px; border-radius: 50%;
+}
+.agent-status-badge.agent-online {
+    background: rgba(16,185,129,.12); color: var(--color-success);
+    border: 1px solid rgba(16,185,129,.3);
+}
+.agent-status-badge.agent-online::before {
+    background: var(--color-success); box-shadow: 0 0 6px var(--color-success);
+    animation: pulse-dot 2s infinite;
+}
+.agent-status-badge.agent-offline {
+    background: rgba(100,116,139,.1); color: var(--text-muted);
+    border: 1px solid var(--border-color);
+}
+.agent-status-badge.agent-offline::before {
+    background: var(--text-muted);
+}
+
 /* ============================================================
    RESPONSIVE
    ============================================================ */

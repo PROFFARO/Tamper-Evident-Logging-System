@@ -2,7 +2,7 @@
 Tamper-Evident Logging System — Flask Application
 
 A secure logging system with cryptographic hash chaining, HMAC authentication,
-and a professional web dashboard for log management and integrity verification.
+a real-time host agent for live log collection, and a professional web dashboard.
 
 API Endpoints:
     GET  /                      — Serve the web dashboard
@@ -17,20 +17,22 @@ API Endpoints:
     GET  /api/stats             — Get log statistics
     POST /api/anchor            — Create integrity anchor
     GET  /api/anchors           — List all anchors
-    POST /api/reset             — Reset database (demo)
-    POST /api/seed              — Seed sample data (demo)
+    POST /api/agent/start       — Start the host agent
+    POST /api/agent/stop        — Stop the host agent
+    GET  /api/agent/status      — Get agent status
+    POST /api/reset             — Reset database
     GET  /api/export            — Export verification report
 """
 
 from flask import Flask, request, jsonify, render_template, send_from_directory
 import json
-import random
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 from core.log_manager import LogManager
 from core.verifier import Verifier
 from core.database import Database
 from core.hmac_signer import HMACSigner
+from agent.host_agent import HostAgent
 
 # Initialize Flask app
 app = Flask(__name__, static_folder="static", template_folder="templates")
@@ -40,6 +42,16 @@ db = Database()
 signer = HMACSigner()
 log_manager = LogManager(db=db, signer=signer)
 verifier = Verifier(db=db, signer=signer)
+
+# Initialize host agent with callback to log_manager
+def agent_log_callback(event_type, severity, source, description, metadata):
+    """Callback used by the host agent to push events into the chain."""
+    try:
+        log_manager.add_entry(event_type, severity, source, description, metadata)
+    except Exception as e:
+        print(f"[Agent] Failed to log event: {e}")
+
+host_agent = HostAgent(log_callback=agent_log_callback, interval=15)
 
 
 # ============================================================
@@ -325,79 +337,37 @@ def reset_database():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/seed", methods=["POST"])
-def seed_data():
-    """
-    [DEMO] Seed the database with realistic sample log entries.
-    
-    Generates a variety of event types, severities, and sources
-    to demonstrate the system's capabilities.
-    """
+# ============================================================
+#  Host Agent API
+# ============================================================
+
+@app.route("/api/agent/start", methods=["POST"])
+def start_agent():
+    """Start the real-time host agent."""
     try:
-        # Reset first
-        db.reset_database()
-        
-        # Reinitialize components with fresh database
-        fresh_log_manager = LogManager(db=db, signer=signer)
-        
-        sample_events = [
-            # Login events
-            ("LOGIN_ATTEMPT", "INFO", "auth-service", "User admin@company.com initiated login from 192.168.1.100", {"ip": "192.168.1.100", "user_agent": "Chrome/120.0"}),
-            ("LOGIN_SUCCESS", "INFO", "auth-service", "User admin@company.com authenticated successfully via MFA", {"ip": "192.168.1.100", "mfa_method": "TOTP"}),
-            ("LOGIN_FAILURE", "WARNING", "auth-service", "Failed login attempt for user john.doe@company.com - invalid password", {"ip": "10.0.0.55", "attempt_count": "3"}),
-            ("LOGIN_FAILURE", "WARNING", "auth-service", "Failed login attempt for user john.doe@company.com - account locked", {"ip": "10.0.0.55", "attempt_count": "5"}),
-            ("SECURITY_ALERT", "CRITICAL", "ids-sensor", "Brute force attack detected from IP 10.0.0.55 targeting user john.doe", {"ip": "10.0.0.55", "rule": "BF-001"}),
-            
-            # User activity
-            ("USER_ACTIVITY", "INFO", "web-portal", "User admin browsed dashboard at /admin/overview", {"path": "/admin/overview", "session_id": "sess_abc123"}),
-            ("DATA_ACCESS", "INFO", "api-gateway", "User admin queried customer records - 150 results returned", {"endpoint": "/api/customers", "result_count": "150"}),
-            ("DATA_MODIFICATION", "WARNING", "api-gateway", "User admin updated customer #4521 payment method", {"customer_id": "4521", "field": "payment_method"}),
-            ("DATA_ACCESS", "INFO", "api-gateway", "User analyst exported financial report Q4-2025", {"report_type": "financial", "period": "Q4-2025"}),
-            
-            # Transactions
-            ("TRANSACTION", "INFO", "payment-service", "Payment processed: $2,450.00 from account ACC-7891 to ACC-3456", {"amount": "2450.00", "currency": "USD", "tx_id": "TXN-20250331-001"}),
-            ("TRANSACTION", "INFO", "payment-service", "Payment processed: $890.50 from account ACC-1234 to ACC-5678", {"amount": "890.50", "currency": "USD", "tx_id": "TXN-20250331-002"}),
-            ("TRANSACTION", "ERROR", "payment-service", "Transaction declined: insufficient funds for account ACC-9012", {"amount": "5000.00", "currency": "USD", "reason": "insufficient_funds"}),
-            
-            # System events
-            ("SYSTEM_EVENT", "INFO", "scheduler", "Automated backup completed successfully - 2.3GB archived", {"backup_size": "2.3GB", "duration": "4m32s"}),
-            ("SYSTEM_EVENT", "WARNING", "monitor", "High CPU utilization detected on server prod-web-03: 94%", {"server": "prod-web-03", "cpu_percent": "94"}),
-            ("CONFIGURATION_CHANGE", "WARNING", "admin-panel", "Firewall rule updated: port 8443 opened for IP range 10.0.0.0/24", {"rule_id": "FW-042", "action": "ALLOW"}),
-            ("SYSTEM_EVENT", "INFO", "deployer", "Application version 3.2.1 deployed to production cluster", {"version": "3.2.1", "cluster": "prod-us-east"}),
-            
-            # Security events
-            ("SECURITY_ALERT", "ERROR", "waf", "SQL injection attempt blocked from IP 203.0.113.42", {"ip": "203.0.113.42", "payload": "' OR 1=1--", "rule": "SQLi-001"}),
-            ("SECURITY_ALERT", "CRITICAL", "siem", "Privilege escalation detected: user intern01 gained admin access", {"user": "intern01", "previous_role": "intern", "new_role": "admin"}),
-            ("DATA_ACCESS", "WARNING", "dlp-agent", "Sensitive data download detected: PII export by user analyst02", {"user": "analyst02", "data_class": "PII", "records": "5000"}),
-            ("LOGOUT", "INFO", "auth-service", "User admin@company.com logged out - session duration 2h15m", {"session_duration": "2h15m"}),
-            
-            # More realistic events
-            ("LOGIN_SUCCESS", "INFO", "auth-service", "User sarah.jones@company.com authenticated via SSO", {"ip": "172.16.0.88", "sso_provider": "Okta"}),
-            ("USER_ACTIVITY", "INFO", "web-portal", "User sarah.jones ran inventory reconciliation report", {"report": "inventory_reconciliation"}),
-            ("ERROR", "ERROR", "api-gateway", "Database connection timeout after 30s on replica db-read-02", {"database": "db-read-02", "timeout": "30s"}),
-            ("SYSTEM_EVENT", "INFO", "cert-manager", "SSL certificate renewed for *.company.com - expires 2026-06-30", {"domain": "*.company.com", "expiry": "2026-06-30"}),
-            ("TRANSACTION", "INFO", "payment-service", "Refund processed: $150.00 to account ACC-7891 for TXN-20250330-015", {"amount": "150.00", "original_tx": "TXN-20250330-015"}),
-        ]
-        
-        entries_created = []
-        for event_type, severity, source, description, metadata in sample_events:
-            entry = fresh_log_manager.add_entry(
-                event_type=event_type,
-                severity=severity,
-                source=source,
-                description=description,
-                metadata=metadata
-            )
-            entries_created.append(entry["id"])
-        
-        return jsonify({
-            "success": True,
-            "message": f"Seeded {len(entries_created)} sample log entries",
-            "entry_count": len(entries_created)
-        }), 201
-    
+        data = request.get_json() or {}
+        interval = data.get("interval", 15)
+        host_agent._interval = max(5, min(300, int(interval)))
+        host_agent.start()
+        return jsonify({"success": True, "message": "Host agent started", "status": host_agent.status})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/agent/stop", methods=["POST"])
+def stop_agent():
+    """Stop the real-time host agent."""
+    try:
+        host_agent.stop()
+        return jsonify({"success": True, "message": "Host agent stopped", "status": host_agent.status})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/agent/status", methods=["GET"])
+def agent_status():
+    """Get the current agent status."""
+    return jsonify(host_agent.status)
 
 
 @app.route("/api/export", methods=["GET"])
@@ -437,6 +407,7 @@ def get_meta():
         "database": "SQLite",
         "event_types": log_manager.get_event_types(),
         "severity_levels": log_manager.get_severity_levels(),
+        "agent": host_agent.status,
     })
 
 
@@ -446,14 +417,21 @@ def get_meta():
 
 if __name__ == "__main__":
     from config import FLASK_HOST, FLASK_PORT, FLASK_DEBUG
+    import os
     
     print("\n" + "=" * 60)
     print("  TAMPER-EVIDENT LOGGING SYSTEM v1.0.0")
     print("=" * 60)
     print(f"  Dashboard:  http://localhost:{FLASK_PORT}")
     print(f"  API Base:   http://localhost:{FLASK_PORT}/api")
-    print(f"  Hash Algo:  SHA-256")
-    print(f"  Signing:    HMAC-SHA256")
+    print(f"  Host Agent: Auto-starting (15s interval)")
+    print(f"  Hash Algo:  SHA-256 + HMAC-SHA256")
     print("=" * 60 + "\n")
     
-    app.run(host=FLASK_HOST, port=FLASK_PORT, debug=FLASK_DEBUG)
+    # Auto-start the host agent (only in the main process, not the reloader)
+    if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not FLASK_DEBUG:
+        host_agent.start()
+    
+    # Disable reloader to prevent duplicate agent instances
+    app.run(host=FLASK_HOST, port=FLASK_PORT, debug=FLASK_DEBUG, use_reloader=False)
+

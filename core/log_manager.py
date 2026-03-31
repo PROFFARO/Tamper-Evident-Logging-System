@@ -14,6 +14,7 @@ Each entry creation follows this process:
 """
 
 import json
+import threading
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List, Tuple
 
@@ -58,6 +59,7 @@ class LogManager:
         self.db = db or Database()
         self.signer = signer or HMACSigner()
         self.hash_engine = HashEngine()
+        self._lock = threading.Lock()  # Thread-safety for chain writes
     
     def add_entry(self, event_type: str, severity: str, source: str,
                   description: str, metadata: Optional[Dict] = None) -> Dict[str, Any]:
@@ -93,40 +95,42 @@ class LogManager:
                 f"Must be one of: {', '.join(self.SEVERITY_LEVELS)}"
             )
         
-        # Build entry data
-        timestamp = datetime.now(timezone.utc).isoformat()
-        metadata_str = json.dumps(metadata or {}, sort_keys=True)
-        
-        entry_data = {
-            "timestamp": timestamp,
-            "event_type": event_type,
-            "severity": severity,
-            "source": source,
-            "description": description,
-            "metadata": metadata_str,
-        }
-        
-        # Get previous hash from the last entry in the chain
-        last_entry = self.db.get_last_entry()
-        previous_hash = last_entry["current_hash"] if last_entry else HashEngine.GENESIS_HASH
-        
-        # Compute the chain hash
-        current_hash = self.hash_engine.compute_entry_hash(entry_data, previous_hash)
-        
-        # Generate HMAC signature
-        hmac_signature = self.signer.sign(current_hash)
-        
-        # Assemble the complete entry
-        complete_entry = {
-            **entry_data,
-            "previous_hash": previous_hash,
-            "current_hash": current_hash,
-            "hmac_signature": hmac_signature,
-        }
-        
-        # Persist to database
-        entry_id = self.db.insert_entry(complete_entry)
-        complete_entry["id"] = entry_id
+        # Thread-safe critical section: read last hash → compute → write
+        with self._lock:
+            # Build entry data
+            timestamp = datetime.now(timezone.utc).isoformat()
+            metadata_str = json.dumps(metadata or {}, sort_keys=True)
+            
+            entry_data = {
+                "timestamp": timestamp,
+                "event_type": event_type,
+                "severity": severity,
+                "source": source,
+                "description": description,
+                "metadata": metadata_str,
+            }
+            
+            # Get previous hash from the last entry in the chain
+            last_entry = self.db.get_last_entry()
+            previous_hash = last_entry["current_hash"] if last_entry else HashEngine.GENESIS_HASH
+            
+            # Compute the chain hash
+            current_hash = self.hash_engine.compute_entry_hash(entry_data, previous_hash)
+            
+            # Generate HMAC signature
+            hmac_signature = self.signer.sign(current_hash)
+            
+            # Assemble the complete entry
+            complete_entry = {
+                **entry_data,
+                "previous_hash": previous_hash,
+                "current_hash": current_hash,
+                "hmac_signature": hmac_signature,
+            }
+            
+            # Persist to database
+            entry_id = self.db.insert_entry(complete_entry)
+            complete_entry["id"] = entry_id
         
         return complete_entry
     

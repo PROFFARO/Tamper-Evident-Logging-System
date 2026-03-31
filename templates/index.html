@@ -167,12 +167,14 @@
                         </svg>
                         Refresh
                     </button>
-                    <button class="btn btn-primary" id="btnSeedData">
+                    <button class="btn btn-primary" id="btnToggleAgent">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                            <circle cx="12" cy="12" r="10"/>
+                            <polygon points="10 8 16 12 10 16 10 8"/>
                         </svg>
-                        Seed Sample Data
+                        <span id="agentBtnLabel">Start Agent</span>
                     </button>
+                    <span class="agent-status-badge" id="agentStatusBadge">Agent Offline</span>
                 </div>
             </div>
             
@@ -256,8 +258,7 @@
                                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                                 <polyline points="14 2 14 8 20 8"/>
                             </svg>
-                            <p>No log entries yet</p>
-                            <button class="btn btn-primary btn-sm" id="btnSeedDataEmpty">Seed Sample Data</button>
+                            <p>Waiting for live events — start the host agent to begin collecting</p>
                         </div>
                     </div>
                 </div>
@@ -449,7 +450,7 @@
                 </svg>
                 <div>
                     <strong>Demonstration Mode</strong>
-                    <p>These operations directly manipulate database records to simulate real-world attacks. Use "Reset & Reseed" to restore clean state.</p>
+                    <p>These operations directly manipulate database records to simulate real-world attacks. After tampering, use Verify Chain to observe detection.</p>
                 </div>
             </div>
             
@@ -557,12 +558,12 @@
                     </svg>
                     Verify Chain Now
                 </button>
-                <button class="btn btn-outline" id="btnResetAndReseed">
+                <button class="btn btn-outline" id="btnResetDB">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                         <polyline points="23 4 23 10 17 10"/>
                         <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
                     </svg>
-                    Reset & Reseed
+                    Reset Database
                 </button>
             </div>
         </section>
