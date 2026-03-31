@@ -51,12 +51,15 @@ let currentFilters = {};
 let metaData = null;
 let agentRefreshInterval = null;
 let lastVerificationReport = null;
+let currentVerifyFilter = 'all';
 
 // ============================================================
 //  Navigation
 // ============================================================
 function navigateTo(section) {
     currentSection = section;
+    window.location.hash = section;
+    
     document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     
@@ -123,14 +126,18 @@ const DIST_COLORS = ['blue', 'cyan', 'green', 'yellow', 'orange', 'red', 'purple
 //  Dashboard
 // ============================================================
 async function loadDashboard() {
+    const btn = document.getElementById('btnRefreshDashboard');
+    const icon = btn?.querySelector('svg');
+    if (icon) icon.style.transition = 'transform 0.5s ease';
+    if (icon) icon.style.transform = 'rotate(360deg)';
+    
     try {
         const stats = await API.getStats();
-        
+        // ... (rest of the content remains same)
         document.getElementById('totalEntries').textContent = stats.chain_length || 0;
         document.getElementById('securityAlerts').textContent = (stats.event_types?.SECURITY_ALERT || 0);
         document.getElementById('totalAnchors').textContent = stats.total_anchors || 0;
         
-        // Chain health — quick verify
         if (stats.chain_length > 0) {
             try {
                 const report = await API.verify();
@@ -143,7 +150,6 @@ async function loadDashboard() {
             document.getElementById('chainHealth').textContent = 'N/A';
         }
         
-        // Recent activity
         const activityPanel = document.getElementById('recentActivityPanel');
         if (stats.recent_entries && stats.recent_entries.length > 0) {
             activityPanel.innerHTML = '<div class="activity-list">' + stats.recent_entries.map(e => `
@@ -156,7 +162,6 @@ async function loadDashboard() {
                 </div>`).join('') + '</div>';
         }
         
-        // Event distribution
         const eventPanel = document.getElementById('eventDistPanel');
         if (stats.event_types && Object.keys(stats.event_types).length > 0) {
             const maxVal = Math.max(...Object.values(stats.event_types));
@@ -172,7 +177,6 @@ async function loadDashboard() {
                 </div>`).join('') + '</div>';
         }
         
-        // Severity breakdown
         const sevPanel = document.getElementById('severityPanel');
         if (stats.severities && Object.keys(stats.severities).length > 0) {
             const sevColors = { INFO: 'blue', WARNING: 'yellow', ERROR: 'red', CRITICAL: 'red' };
@@ -190,6 +194,8 @@ async function loadDashboard() {
         }
     } catch (err) {
         showToast('Failed to load dashboard: ' + err.message, 'error');
+    } finally {
+        if (icon) setTimeout(() => { icon.style.transform = 'rotate(0deg)'; }, 500);
     }
 }
 
@@ -246,6 +252,10 @@ async function toggleAgent() {
 // ============================================================
 async function loadLogs(page = 1) {
     currentPage = page;
+    const btn = document.getElementById('btnApplyFilters');
+    const icon = btn?.querySelector('svg');
+    if (icon) { icon.style.transition = 'transform 0.5s ease'; icon.style.transform = 'rotate(360deg)'; }
+
     try {
         const params = new URLSearchParams({ page, per_page: 20 });
         if (currentFilters.event_type) params.set('event_type', currentFilters.event_type);
@@ -273,10 +283,11 @@ async function loadLogs(page = 1) {
                 </tr>`).join('');
         }
         
-        // Pagination
         renderPagination(data.page, data.total_pages, data.total);
     } catch (err) {
         showToast('Failed to load logs: ' + err.message, 'error');
+    } finally {
+        if (icon) setTimeout(() => { icon.style.transform = 'rotate(0deg)'; }, 500);
     }
 }
 
@@ -326,6 +337,10 @@ async function showEntryModal(id) {
 //  Hash Chain Visualizer
 // ============================================================
 async function loadChain() {
+    const btn = document.getElementById('btnRefreshChain');
+    const icon = btn?.querySelector('svg');
+    if (icon) { icon.style.transition = 'transform 0.5s ease'; icon.style.transform = 'rotate(360deg)'; }
+    
     try {
         const data = await API.getLogs('page=1&per_page=30');
         const container = document.getElementById('chainContainer');
@@ -335,13 +350,11 @@ async function loadChain() {
             return;
         }
         
-        // Reverse to show chronological (oldest first)
         const entries = [...data.entries].reverse();
         let html = '';
         
         entries.forEach((e, i) => {
             const isGenesis = e.previous_hash === '0'.repeat(64);
-            
             if (i > 0) {
                 html += `<div class="chain-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg></div>`;
             }
@@ -370,6 +383,8 @@ async function loadChain() {
         container.innerHTML = html;
     } catch (err) {
         showToast('Failed to load chain: ' + err.message, 'error');
+    } finally {
+        if (icon) setTimeout(() => { icon.style.transform = 'rotate(0deg)'; }, 500);
     }
 }
 
@@ -413,15 +428,45 @@ async function runVerification() {
                 </div>
             </div>`;
         
+        // Filter Bar
+        html += `
+        <div class="verify-filter-bar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px; background: var(--bg-surface-2); padding: 12px 16px; border-radius: var(--border-radius-sm); border: 1px solid var(--border-color); flex-wrap:wrap; gap:12px;">
+            <div style="display:flex; gap: 8px;" id="verifyFilterBtns">
+                <button class="btn btn-xs btn-primary" data-filter="all" onclick="setVerifyFilterStatus('all')">All Entries</button>
+                <button class="btn btn-xs btn-outline" data-filter="tampered" onclick="setVerifyFilterStatus('tampered')">Failed Only</button>
+                <button class="btn btn-xs btn-outline" data-filter="valid" onclick="setVerifyFilterStatus('valid')">Passed Only</button>
+            </div>
+            <div style="display:flex; gap: 12px; align-items:center; flex-wrap:wrap;">
+                <span style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.05em;">Failure Type:</span>
+                <select class="form-input form-input--sm" id="vf-error-type" onchange="applyVerifyFilter()" style="height:28px; font-size:0.75rem; padding: 2px 8px;">
+                    <option value="all">Any</option>
+                    <option value="hash">Hash Mismatch</option>
+                    <option value="hmac">HMAC Signature</option>
+                    <option value="seq">Sequence/ID</option>
+                    <option value="time">Temporal Order</option>
+                </select>
+                <span style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.05em; margin-left:8px;">Search:</span>
+                <input type="text" class="form-input form-input--sm mono" id="vf-search" placeholder="ID..." onkeyup="applyVerifyFilter()" style="width: 90px; height:28px; font-size:0.75rem;">
+            </div>
+        </div>
+        `;
+        
         // Entry-level results
-        html += '<div class="verify-entry-list">';
-        html += `<div class="verify-entry" style="font-weight:600;background:var(--bg-surface-2);border:none">
+        html += '<div class="verify-entry-list" id="verifyEntryList">';
+        html += `<div class="verify-entry header-row" style="font-weight:600;background:var(--bg-surface-2);border:none; cursor:default;" data-is-header="true">
             <span>ID</span><span>Description</span><span>Hash</span><span>HMAC</span><span>Seq</span><span>Time</span><span></span></div>`;
         
         report.entries.forEach(e => {
             const valid = e.is_valid;
             html += `
-                <div class="verify-entry ${valid ? 'valid' : 'invalid'}" onclick="openVerificationSidebar(${e.entry_id})" style="cursor:pointer" title="Click for detailed mathematical trace">
+                <div class="verify-entry ${valid ? 'valid' : 'invalid'}" 
+                     data-id="${e.entry_id}" 
+                     data-status="${valid ? 'valid' : 'tampered'}" 
+                     data-hash="${e.hash_valid}" 
+                     data-hmac="${e.hmac_valid}" 
+                     data-seq="${e.sequence_valid}" 
+                     data-time="${e.timestamp_valid}"
+                     onclick="openVerificationSidebar(${e.entry_id})" style="cursor:pointer" title="Click for detailed mathematical trace">
                     <span class="verify-entry__id">#${e.entry_id}</span>
                     <span style="font-size:.75rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Entry ${e.entry_id}</span>
                     <span class="verify-check ${e.hash_valid ? 'pass' : 'fail'}">${e.hash_valid ? 'PASS' : 'FAIL'}</span>
@@ -485,6 +530,47 @@ function openVerificationSidebar(entryId) {
 
 function closeVerificationSidebar() {
     document.getElementById('verificationSidebar').classList.remove('open');
+}
+
+function setVerifyFilterStatus(status) {
+    currentVerifyFilter = status;
+    document.querySelectorAll('#verifyFilterBtns .btn').forEach(b => {
+        if (b.dataset.filter === status) {
+            b.className = 'btn btn-xs btn-primary';
+        } else {
+            b.className = 'btn btn-xs btn-outline';
+        }
+    });
+    applyVerifyFilter();
+}
+
+function applyVerifyFilter() {
+    const errorType = document.getElementById('vf-error-type').value;
+    const searchVal = document.getElementById('vf-search').value.trim();
+    
+    document.querySelectorAll('#verifyEntryList .verify-entry:not([data-is-header="true"])').forEach(row => {
+        let show = true;
+        
+        // 1. Status Filter
+        if (currentVerifyFilter !== 'all' && row.dataset.status !== currentVerifyFilter) {
+            show = false;
+        }
+        
+        // 2. Error Type Filter
+        if (show && errorType !== 'all') {
+            if (errorType === 'hash' && row.dataset.hash === 'true') show = false;
+            if (errorType === 'hmac' && row.dataset.hmac === 'true') show = false;
+            if (errorType === 'seq' && row.dataset.seq === 'true') show = false;
+            if (errorType === 'time' && row.dataset.time === 'true') show = false;
+        }
+        
+        // 3. Search Filter
+        if (show && searchVal !== '') {
+            if (!row.dataset.id.includes(searchVal)) show = false;
+        }
+        
+        row.style.display = show ? '' : 'none';
+    });
 }
 
 // ============================================================
@@ -730,10 +816,23 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('entryModal').classList.remove('open');
         }
     });
+
+    // Handle Hash Routing on Load & Native Back/Forward
+    const handleHashRouter = () => {
+        const hash = window.location.hash.replace('#', '');
+        const validSections = ['dashboard', 'logs', 'chain', 'verify', 'tamper', 'add-log', 'anchors', 'export'];
+        if (hash && validSections.includes(hash)) {
+            navigateTo(hash);
+        } else {
+            navigateTo('dashboard');
+        }
+    };
     
-    // Load initial data
+    window.addEventListener('hashchange', handleHashRouter);
+    
+    // Load initial data and execute route
     loadFilterOptions();
-    loadDashboard();
+    handleHashRouter();
     updateAgentUI();
     
     // If agent is already running (auto-start), enable auto-refresh
