@@ -475,35 +475,38 @@ body {
 /* ============================================================
    TAMPER LAB
    ============================================================ */
-.alert {
-    display: flex; align-items: flex-start; gap: 12px;
-    padding: 14px 18px; border-radius: var(--border-radius);
-    margin-bottom: 20px; font-size: .85rem;
+.alert-inline {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 12px 16px; border-radius: var(--border-radius-sm);
+    background: transparent; border: 1px dashed var(--border-color);
+    margin-bottom: 24px; font-size: .8rem; color: var(--text-muted);
 }
-.alert--warning { background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.25); color: var(--accent-yellow); }
-.alert--warning strong { color: var(--accent-yellow); display: block; margin-bottom: 2px; }
-.alert--warning p { color: var(--text-secondary); margin: 0; }
-.alert svg { flex-shrink: 0; margin-top: 2px; }
+.alert-inline strong { color: var(--text-secondary); }
+.alert-inline svg { flex-shrink: 0; margin-top: 2px; }
 
-.tamper-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px,1fr)); gap: 16px; margin-bottom: 20px; }
-.tamper-card {
+.tamper-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px; }
+.tamper-panel {
+    display: grid; grid-template-columns: 280px 1fr auto; gap: 24px; align-items: center;
     background: var(--bg-surface); border: 1px solid var(--border-color);
-    border-radius: var(--border-radius-lg); padding: 22px;
-    transition: all var(--transition-base);
+    border-radius: var(--border-radius-sm); padding: 18px 24px;
+    transition: all var(--transition-fast);
 }
-.tamper-card:hover { border-color: var(--border-color-2); }
-.tamper-card__header { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-.tamper-card__icon {
-    width: 40px; height: 40px; border-radius: 10px;
-    display: flex; align-items: center; justify-content: center;
+.tamper-panel:hover { border-color: var(--border-color-2); }
+.tamper-panel__info { display: flex; flex-direction: column; gap: 6px; }
+.tamper-panel__title { font-size: .95rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
+.tamper-panel__icon { color: var(--text-muted); }
+.tamper-panel__desc { font-size: .78rem; color: var(--text-muted); line-height: 1.5; }
+.tamper-panel__form { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; width: 100%; min-width: 0; }
+.tamper-panel .form-input--sm { padding: 4px 10px; font-size: .8rem; height: 32px; max-width: 160px; flex-shrink: 0; }
+.tamper-panel #tamperModifyDesc { max-width: none; flex: 1; min-width: 250px; }
+.tamper-panel__action .btn { padding: 0 16px; height: 32px; font-size: .8rem; white-space: nowrap; line-height: 32px; display: inline-flex; align-items: center; justify-content: center; }
+
+@media (max-width: 1024px) {
+    .tamper-panel { grid-template-columns: 1fr; gap: 16px; align-items: start; }
+    .tamper-panel__form { flex-wrap: wrap; }
+    .tamper-panel .form-input--sm { max-width: 100%; width: 100%; }
 }
-.tamper-card__icon svg { width: 20px; height: 20px; }
-.tamper-card--modify .tamper-card__icon { background: rgba(245,158,11,.15); color: var(--accent-yellow); }
-.tamper-card--delete .tamper-card__icon { background: rgba(239,68,68,.15); color: var(--accent-red); }
-.tamper-card--reorder .tamper-card__icon { background: rgba(139,92,246,.15); color: var(--accent-purple); }
-.tamper-card__header h3 { font-size: 1rem; font-weight: 600; }
-.tamper-card__desc { font-size: .82rem; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5; }
-.tamper-card__form { display: flex; flex-direction: column; gap: 10px; }
+
 .tamper-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 
 /* ============================================================
