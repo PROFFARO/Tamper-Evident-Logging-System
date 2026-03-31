@@ -226,17 +226,22 @@ class HostAgent:
         try:
             current_conns = set()
             for c in psutil.net_connections(kind='tcp'):
-                if c.raddr and c.status == 'ESTABLISHED':
-                    conn_key = (c.laddr, c.raddr, c.status)
+                # Track both ESTABLISHED connections and active LISTENERS on suspicious ports
+                lport = c.laddr.port if c.laddr else 0
+                rport = c.raddr.port if c.raddr else 0
+                
+                is_established = (c.raddr and c.status == 'ESTABLISHED')
+                is_suspicious_listener = (c.status == 'LISTEN' and lport in SUSPICIOUS_PORTS)
+                
+                if is_established or is_suspicious_listener:
+                    conn_key = (c.laddr, c.raddr if c.raddr else tuple(), c.status)
                     current_conns.add(conn_key)
 
                     if conn_key not in self._known_connections:
-                        rport = c.raddr.port if c.raddr else 0
-                        lport = c.laddr.port if c.laddr else 0
-
                         # Determine severity
                         severity = "INFO"
                         event_type = "DATA_ACCESS"
+                        
                         if rport in SUSPICIOUS_PORTS or lport in SUSPICIOUS_PORTS:
                             severity = "CRITICAL"
                             event_type = "SECURITY_ALERT"
@@ -247,13 +252,16 @@ class HostAgent:
                         except (psutil.NoSuchProcess, psutil.AccessDenied):
                             proc_name = "unknown"
 
-                        remote_addr = f"{c.raddr.ip}:{c.raddr.port}" if c.raddr else "unknown"
                         local_addr = f"{c.laddr.ip}:{c.laddr.port}" if c.laddr else "unknown"
+                        remote_addr = f"{c.raddr.ip}:{c.raddr.port}" if c.raddr else "none"
+                        
+                        desc = (f"Suspicious port listener detected: {local_addr} (process: {proc_name})" 
+                                if is_suspicious_listener else 
+                                f"New TCP connection: {local_addr} → {remote_addr} (process: {proc_name})")
 
-                        self._emit(event_type, severity, "network-monitor",
-                                   f"New TCP connection: {local_addr} → {remote_addr} (process: {proc_name})",
+                        self._emit(event_type, severity, "network-monitor", desc,
                                    {"local": local_addr, "remote": remote_addr,
-                                    "process": proc_name, "pid": str(c.pid or 0)})
+                                    "process": proc_name, "pid": str(c.pid or 0), "state": c.status})
 
             self._known_connections = current_conns
 
