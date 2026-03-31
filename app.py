@@ -26,7 +26,44 @@ API Endpoints:
 
 from flask import Flask, request, jsonify, render_template, send_from_directory
 import json
+import os
+import sys
+import atexit
 from datetime import datetime, timezone
+
+# ============================================================
+#  Session Logging Setup
+# ============================================================
+class LoggerTee:
+    """Intercepts terminal output and simultaneously writes it to a log file."""
+    def __init__(self, filename, original_stream):
+        self.filename = filename
+        self.original_stream = original_stream
+        os.makedirs(os.path.dirname(self.filename), exist_ok=True)
+        self.log_file = open(self.filename, "a", encoding="utf-8")
+        
+    def write(self, message):
+        self.original_stream.write(message)
+        self.log_file.write(message)
+        self.log_file.flush()
+        
+    def flush(self):
+        self.original_stream.flush()
+        self.log_file.flush()
+
+    def close(self):
+        self.log_file.close()
+
+# Start saving everything printed to the terminal into a Session file
+session_log_path = os.path.join("logs", f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+sys.stdout = LoggerTee(session_log_path, sys.stdout)
+sys.stderr = LoggerTee(session_log_path, sys.stderr)
+
+def cleanup_loggers():
+    if hasattr(sys.stdout, 'close'): sys.stdout.close()
+    if hasattr(sys.stderr, 'close'): sys.stderr.close()
+
+atexit.register(cleanup_loggers)
 
 from core.log_manager import LogManager
 from core.verifier import Verifier
@@ -48,8 +85,9 @@ def agent_log_callback(event_type, severity, source, description, metadata):
     """Callback used by the host agent to push events into the chain."""
     try:
         log_manager.add_entry(event_type, severity, source, description, metadata)
+        print(f"[SESSION LOG] AGENT EVENT ADDED: {event_type} - {description}")
     except Exception as e:
-        print(f"[Agent] Failed to log event: {e}")
+        print(f"[SESSION LOG] AGENT FAILED: {e}")
 
 host_agent = HostAgent(log_callback=agent_log_callback, interval=15)
 
@@ -101,7 +139,7 @@ def add_log():
             description=data["description"],
             metadata=data.get("metadata", {})
         )
-        
+        print(f"\n[SESSION LOG] MANUAL EVENT ADDED: {data['event_type']} - {data['description']}")
         return jsonify({"success": True, "entry": entry}), 201
     
     except ValueError as e:
@@ -178,6 +216,7 @@ def verify_chain():
     """
     try:
         report = verifier.verify_full_chain()
+        print(f"\n[SESSION LOG] CHAIN VERIFIED | Status: {'VALID' if report.chain_intact else 'TAMPERED'} | Scanned: {report.valid_entries}")
         return jsonify(report.to_dict())
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -214,6 +253,7 @@ def tamper_modify(entry_id):
         success = db.tamper_modify_entry(entry_id, new_description)
         if not success:
             return jsonify({"error": "Entry not found"}), 404
+        print(f"\n[SESSION LOG] TAMPER SIMULATION: Modification Attack explicitly executed on ID {entry_id}")
         
         return jsonify({
             "success": True,
@@ -237,6 +277,7 @@ def tamper_delete(entry_id):
         success = db.tamper_delete_entry(entry_id)
         if not success:
             return jsonify({"error": "Entry not found"}), 404
+        print(f"\n[SESSION LOG] TAMPER SIMULATION: Deletion Attack explicitly executed on ID {entry_id}")
         
         return jsonify({
             "success": True,
@@ -267,6 +308,7 @@ def tamper_reorder():
         success = db.tamper_swap_entries(id_a, id_b)
         if not success:
             return jsonify({"error": "One or both entries not found"}), 404
+        print(f"\n[SESSION LOG] TAMPER SIMULATION: Reorder Attack explicitly executed between ID {id_a} and ID {id_b}")
         
         return jsonify({
             "success": True,
@@ -349,6 +391,7 @@ def start_agent():
         interval = data.get("interval", 15)
         host_agent._interval = max(5, min(300, int(interval)))
         host_agent.start()
+        print(f"\n[SESSION LOG] HOST AGENT ACTIVATED | Interval: {host_agent._interval}s")
         return jsonify({"success": True, "message": "Host agent started", "status": host_agent.status})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -359,6 +402,7 @@ def stop_agent():
     """Stop the real-time host agent."""
     try:
         host_agent.stop()
+        print("\n[SESSION LOG] HOST AGENT DEACTIVATED")
         return jsonify({"success": True, "message": "Host agent stopped", "status": host_agent.status})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
